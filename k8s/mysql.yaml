@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sakila-mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sakila-mysql
+  template:
+    metadata:
+      labels:
+        app: sakila-mysql
+    spec:
+      containers:
+        - name: mysql
+          image: sakiladb/mysql:latest
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: root
+            - name: MYSQL_DATABASE
+              value: sakila
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sakila-mysql
+spec:
+  selector:
+    app: sakila-mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
