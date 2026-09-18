@@ -1,9 +1,3 @@
-require('dd-trace').init({
-  service: 'sakila-backend',
-  env: 'local',
-  version: '1.0.0',
-  logInjection: true
-});
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
