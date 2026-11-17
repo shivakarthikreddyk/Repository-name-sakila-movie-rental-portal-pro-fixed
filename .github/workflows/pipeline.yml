@@ -98,9 +98,14 @@ jobs:
       - name: Publish the exact images that passed the tests
         if: steps.metadata.outputs.publish == 'true'
         run: |
-          docker push "$DATABASE_IMAGE"
-          docker push "$BACKEND_IMAGE"
-          docker push "$FRONTEND_IMAGE"
+          for image in "$DATABASE_IMAGE" "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+            for attempt in 1 2 3; do
+              if docker push "$image"; then break; fi
+              if [[ "$attempt" == 3 ]]; then exit 1; fi
+              echo "Registry push failed; retrying the same tested image ($attempt/3)."
+              sleep 10
+            done
+          done
       - name: Package deployment scripts and image digests
         if: steps.metadata.outputs.publish == 'true'
         env:
@@ -132,13 +137,17 @@ jobs:
     if: needs.test-and-publish.outputs.publish == 'true' && vars.OCTOPUS_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
     concurrency:
       group: sakila-octopus-deployment
       cancel-in-progress: false
     env:
       OCTOPUS_URL: ${{ vars.OCTOPUS_URL }}
       OCTOPUS_SPACE: ${{ vars.OCTOPUS_SPACE }}
-      OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+      OCTOPUS_SERVICE_ACCOUNT_ID: ${{ vars.OCTOPUS_SERVICE_ACCOUNT_ID }}
       OCTOPUS_PROJECT: ${{ vars.OCTOPUS_PROJECT }}
       OCTOPUS_ENVIRONMENT: ${{ vars.OCTOPUS_ENVIRONMENT }}
     steps:
@@ -146,10 +155,15 @@ jobs:
         run: |
           : "${OCTOPUS_URL:?Set repository variable OCTOPUS_URL}"
           : "${OCTOPUS_SPACE:?Set repository variable OCTOPUS_SPACE}"
-          : "${OCTOPUS_API_KEY:?Set repository secret OCTOPUS_API_KEY}"
+          : "${OCTOPUS_SERVICE_ACCOUNT_ID:?Set repository variable OCTOPUS_SERVICE_ACCOUNT_ID}"
           : "${OCTOPUS_PROJECT:?Set repository variable OCTOPUS_PROJECT}"
           : "${OCTOPUS_ENVIRONMENT:?Set repository variable OCTOPUS_ENVIRONMENT}"
           [[ "$OCTOPUS_ENVIRONMENT" != *$'\n'* ]] || { echo 'Configure one environment per deployment job'; exit 1; }
+      - name: Authenticate to Octopus with GitHub OIDC
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ vars.OCTOPUS_URL }}
+          service_account_id: ${{ vars.OCTOPUS_SERVICE_ACCOUNT_ID }}
       - uses: actions/download-artifact@v4
         with:
           name: octopus-package
@@ -173,6 +187,9 @@ jobs:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ steps.release.outputs.release_number }}
           environments: ${{ vars.OCTOPUS_ENVIRONMENT }}
+          variables: |
+            GHCR.Username:${{ github.actor }}
+            GHCR.Token:${{ secrets.GITHUB_TOKEN }}
       - name: Wait for the actual deployment result
         id: wait
         uses: OctopusDeploy/await-task-action@v3

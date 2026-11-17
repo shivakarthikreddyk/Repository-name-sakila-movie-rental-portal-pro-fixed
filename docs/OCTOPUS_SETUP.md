@@ -38,7 +38,7 @@ membership takes effect. Docker access permits control of containers and host mo
 
 In Octopus **Infrastructure → Deployment Targets**, verify the existing Linux
 polling Tentacle is healthy, assigned to the intended environment, and has the
-target role/tag `sakila-docker`. Prefer Octopus's generated Linux polling
+target role/tag `ecommerce-api` (the existing target's tag). Prefer Octopus's generated Linux polling
 installation/registration script if creating a new target; keep credentials out of Git.
 
 Only one application can own port 8092. If the local development Compose stack
@@ -61,12 +61,19 @@ Add these project variables, scoped to the target environment as appropriate:
 | `Sakila.BindAddress` | `127.0.0.1` for local Windows/WSL access | No |
 | `Sakila.DeployRoot` | `/opt/sakila` | No |
 | `Sakila.ComposeProject` | `sakila-production` | No |
-| `GHCR.Username` | GitHub account allowed to read the images | No |
-| `GHCR.Token` | Token with `read:packages` and access to this repository's packages | Yes |
+| `GHCR.Username` | Required prompted variable; supplied by the workflow as `github.actor` | No |
+| `GHCR.Token` | Required prompted variable; supplied by the workflow as its temporary `GITHUB_TOKEN` | Yes |
 
-Set both GHCR variables to empty values only if the images are publicly
-readable. GitHub's CI `GITHUB_TOKEN` is temporary and must not be reused on the
-Tentacle. Newly published GHCR packages can be private even for public repositories.
+Keep the three GHCR packages private. Configure both GHCR variables as
+**prompted and required**, with no stored default; make `GHCR.Token` sensitive.
+The CD job has `packages: read` and passes its temporary `GITHUB_TOKEN` to
+Octopus for this deployment only. It waits for deployment completion so the
+token remains valid during image pulls. Docker login uses a temporary directory
+which the deployment script removes on exit. No permanent GitHub PAT is needed.
+
+The token expires when the GitHub job ends. A later manual deployment from the
+Octopus portal requires a fresh package-read token entered in that prompt, or
+use a new pipeline release. Do not reuse a token from a previous deployment.
 
 Keep the database passwords, Compose project name, and deployment directory
 stable between releases. The project name determines the persistent volume.
@@ -79,10 +86,10 @@ The workflow publishes `sakila-deploy.<version>.zip` into the **Octopus built-in
 package feed**. GHCR holds Docker images; the built-in feed holds scripts and
 the release's image digest manifest.
 
-Add one **Run a Script** step named `Deploy Sakila`:
+The existing second **Run a Script** step is now named `02 - Deploy Sakila Docker Compose`:
 
 1. Execution location: **Run on each deployment target**.
-2. Target role/tag: `sakila-docker`.
+2. Target role/tag: `ecommerce-api`, scoped to Development.
 3. Script source: **Script file inside a package**.
 4. Package feed: **Octopus Server (built-in)**.
 5. Package ID: **`sakila-deploy`**.
@@ -123,14 +130,34 @@ Under **Repository → Settings → Secrets and variables → Actions**, create:
 
 | Type | Name | Value |
 | --- | --- | --- |
-| Secret | `OCTOPUS_API_KEY` | Octopus service account API key with package, release, deployment, and task-read permissions in the intended space/project |
+| Variable | `OCTOPUS_SERVICE_ACCOUNT_ID` | The GUID from the dedicated Octopus service account's OpenID Connect section |
 | Variable | `OCTOPUS_URL` | `https://karthik-devops-lab.octopus.app` |
 | Variable | `OCTOPUS_SPACE` | `Default` |
 | Variable | `OCTOPUS_PROJECT` | `Ecommerce-DevOps-Lab` |
 | Variable | `OCTOPUS_ENVIRONMENT` | `Development` |
 | Variable | `OCTOPUS_ENABLED` | `true`, after steps 1–3 are complete |
 
-Keep API keys in Secrets, not Variables or source code. The workflow declares
+Use a dedicated Octopus service account with package publishing rights in Default,
+and release/deployment/task-read rights limited to Ecommerce-DevOps-Lab and
+Development. The configured account is `sakila-github-actions`, assigned to the
+Default-space team `Sakila CI Delivery`. Its custom role, `Sakila Pipeline Publisher`,
+contains `BuiltInFeedDownload`, `BuiltInFeedPush`, `DeploymentCreate`,
+`DeploymentView`, `EnvironmentView`, `FeedView`, `LibraryVariableSetView`,
+`LifecycleView`, `ProcessView`, `ProjectView`, `ReleaseCreate`, `ReleaseView`,
+`TargetTagView`, `TaskView`, and `TenantView`. The role assignment is scoped to
+the project and Development; package permissions apply to the space's built-in feed.
+It grants no editing, deletion, account administration, or runbook execution.
+
+Add GitHub Actions OIDC identities for this exact repository:
+
+- Owner: `shivakarthikreddyk`
+- Repository: `Repository-name-sakila-movie-rental-portal-pro-fixed`
+- Branch identity: `main`
+- Tag identity: `v*`
+
+Do not authorize pull-request identities. The workflow uses
+`OctopusDeploy/login@v2` and short-lived tokens; no Octopus API-key secret is
+needed. The service-account GUID is an identifier, not a credential. The workflow declares
 `packages: write` for GHCR publishing. If organization policy restricts it,
 allow this repository's workflow to publish its own packages.
 
@@ -141,7 +168,7 @@ gh variable set OCTOPUS_URL --body 'https://karthik-devops-lab.octopus.app'
 gh variable set OCTOPUS_SPACE --body 'Default'
 gh variable set OCTOPUS_PROJECT --body 'Ecommerce-DevOps-Lab'
 gh variable set OCTOPUS_ENVIRONMENT --body 'Development'
-gh secret set OCTOPUS_API_KEY     # enter the key at the protected prompt
+gh variable set OCTOPUS_SERVICE_ACCOUNT_ID --body '<service-account-guid>'
 gh variable set OCTOPUS_ENABLED --body 'true'
 ```
 
@@ -152,8 +179,8 @@ publish, package, and deploy automatically when Octopus is enabled. For a stable
 version after the existing `0.0.2`, create a new tag on the intended commit:
 
 ```bash
-git tag v0.0.3
-git push origin v0.0.3
+git tag v0.0.4
+git push origin v0.0.4
 ```
 
 Do not move an existing release tag. Release package uploads fail if a version
@@ -184,6 +211,7 @@ configure it in Octopus rather than embedding target credentials into CI.
 ## References
 
 - [Octopus GitHub Actions](https://octopus.com/docs/packaging-applications/build-servers/github-actions)
+- [Octopus GitHub OIDC authentication](https://octopus.com/docs/api/authentication/openid-connect/github-actions)
 - [Run a script from a package](https://octopus.com/docs/deployments/custom-scripts/run-a-script-step)
 - [Octopus variables in Bash](https://octopus.com/docs/deployments/custom-scripts/using-variables-in-scripts)
 - [Linux Tentacle](https://octopus.com/docs/infrastructure/deployment-targets/tentacle/linux)

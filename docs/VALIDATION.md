@@ -26,21 +26,23 @@ Real API tests verified 1,000 films, 599 customers, and 16,044 rentals through
 Nginx → Express → MySQL. Browser tests covered all navigation tabs, filtered
 search, empty results, mobile width, and recovery after an API error.
 
-## External activation still required
+## Remote validation and activation
 
-- At the time of the local validation, no GitHub workflow or Octopus deployment
-  had run. Subsequent remote CI results are tracked in GitHub Actions.
-- GitHub repository variables now identify the Default space,
-  Ecommerce-DevOps-Lab project, and Development environment.
-  `OCTOPUS_ENABLED=false` until deployment prerequisites are ready.
-  The Octopus API-key secret is still required.
-- The Ubuntu `Tentacle` service was active and pointed at
-  `karthik-devops-lab.octopus.app`, but Docker was unavailable in that WSL distro.
-  Enable Docker integration for Ubuntu, or provide a native Docker Engine.
-- The supplied screenshots confirm the Octopus names and show release `0.0.2`
-  in Development. The connected Chrome profile lacks instance access, while
-  the other Chrome window is minimized. The deployment process is not yet verified.
-- Existing release `0.0.2` has not been changed.
+- [Branch CI run 43994024399](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994024399)
+  passed all checks.
+- [Release build 43994590104](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994590104)
+  passed on attempt 2, published the three private GHCR images, and produced
+  `sakila-deploy.0.0.3.zip` with their exact digests. Attempt 1 encountered a
+  transient GHCR `unknown blob` error; the workflow now retries image pushes.
+- Restarting Docker Desktop restored its Ubuntu WSL integration. Docker 29.6.1,
+  Compose 5.3.0, Python, and the active root-owned Tentacle were verified in
+  `Ubuntu`. That distro can reach the healthy application on port 8092.
+- The existing Octopus step now runs packaged `deploy.sh` on the `ecommerce-api`
+  target tag in Development. Database passwords are saved as sensitive variables.
+- A dedicated GitHub OIDC service account is configured for this repository's
+  main branch and version tags. The CD job supplies temporary package-read
+  credentials through sensitive prompted variables; the GHCR images stay private.
+- Existing release `0.0.2` has not been changed. Octopus deployment has not yet
+  been verified; CI publishing success is not a deployment result.
 
-Follow [OCTOPUS_SETUP.md](OCTOPUS_SETUP.md) before enabling CD. Local success
-does not establish cloud deployment success.
+Follow [OCTOPUS_SETUP.md](OCTOPUS_SETUP.md) for the exact runtime and permissions.
