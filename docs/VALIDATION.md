@@ -1,62 +1,71 @@
-# Local validation — 2026-11-16
+# Validation — 2026-11-16
 
-Validated from this checkout using Docker Desktop's Linux engine. Octopus now
-manages the running `sakila-production` Compose project at http://localhost:8092.
-The local test project `sakila-portal` is stopped; its database volume is preserved.
+## Separate applications and deployments
+
+The initial setup incorrectly reused Ecommerce-DevOps-Lab for Sakila. That was
+corrected by creating a dedicated Sakila project and restoring Ecommerce's
+original deployment process from Octopus's audit history.
+
+| Application | Octopus project | URL | Verified release |
+| --- | --- | --- | --- |
+| Original Python Ecommerce API | Ecommerce-DevOps-Lab | http://localhost:8092 | 0.0.2 |
+| React / Express / MySQL Sakila portal | Sakila-Movie-Rental-Portal | http://localhost:8093 | 0.0.5 |
+
+Both use the existing healthy Ubuntu WSL2 polling Tentacle. Ecommerce selects
+`ecommerce-api`; Sakila selects `sakila-portal`. Each has its own process,
+variables, release history, images, containers, and port.
+
+- [Sakila pipeline 44000505285](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/44000505285)
+  built and tested all three images, published them privately to GHCR, and
+  deployed release 0.0.5 into the dedicated project.
+- [Sakila deployment ServerTasks-112](https://karthik-devops-lab.octopus.app/app#/tasks/ServerTasks-112)
+  succeeded and reported port 8093. Docker login emits a warning about its
+  temporary credential file; that directory is removed on script exit.
+- [Ecommerce restoration ServerTasks-113](https://karthik-devops-lab.octopus.app/app#/tasks/ServerTasks-113)
+  successfully redeployed its original release 0.0.2. The previous stopped
+  container is preserved as `octopus-ecommerce-octopus-pre-separation`.
+- Ecommerce `/`, `/health`, and `/products` returned the expected Python API
+  identity, healthy status, and three pickle products on port 8092.
+- **16 API and Chromium checks passed against Sakila on port 8093**, including
+  all navigation tabs, searches, empty results, mobile layout and error recovery.
+- Sakila still uses `sakila-production_mysql-data`, created at
+  `2026-11-17T01:42:47Z`; it was not replaced or deleted. Tests verified 1,000
+  films, 599 customers, and 16,044 rentals after the move.
+- Sakila's GitHub OIDC account is restricted to Sakila-Movie-Rental-Portal and
+  Development. The workflow also rejects any other `OCTOPUS_PROJECT` value.
+- Sakila-only variables were removed from Ecommerce. Its original inline Bash
+  script, pinned Ecommerce image and `ecommerce-api` target tag were restored.
+- Misrouted Sakila releases 0.0.4 and 0.1.8-ci.1 remain in Ecommerce's audit
+  history, with progression blocked and an explanation attached. They are not
+  Ecommerce versions and must not be redeployed there.
+
+## Application and pipeline checks
 
 | Check | Result |
 | --- | --- |
-| Frontend production build | Passed, including inside Docker |
-| Backend unit tests | 4 passed |
-| Windows pytest: real API, Chromium UI, release metadata | 22 passed |
-| Linux pytest: release metadata and deployment scripts | 9 passed (6 overlap the Windows run) |
-| Docker Compose build and startup | All 3 containers healthy |
-| Container replacement | All 3 recreated; dataset retained; API/UI checks passed afterward |
-| Target smoke script | Frontend, health, dashboard, and all 5 lists passed |
+| Frontend production build | Passed locally and in CI |
+| Backend Node unit tests | 4 passed |
+| Pytest API and Chromium checks | 16 passed |
+| Linux release metadata / deployment failure tests | 9 passed |
+| Docker Compose startup | All 3 Sakila containers healthy |
+| Container replacement | Dataset retained; API checks passed afterward |
+| Target smoke script | Frontend, health, dashboard, all 5 lists passed |
 | GitHub Actions syntax (actionlint) | Passed |
-| Bash scripts (ShellCheck) | Passed |
+| Bash syntax and ShellCheck | Passed |
 | Git whitespace checks | Passed |
 
-This is **29 distinct passing tests** across Node and Python. The 3 Bash
-deployment tests are skipped on Windows and were run successfully in a Linux
-Python container. They simulate Docker failures to verify that failed pulls
-leave containers untouched and failed updates restore the previous application
-while preserving the failure exit code.
+There are **29 distinct passing tests** across Node and Python. The Bash
+failure tests simulate Docker failures to verify failed pulls leave containers
+untouched and failed updates restore the previous application while preserving
+an unsuccessful exit code.
 
-Real API tests verified 1,000 films, 599 customers, and 16,044 rentals through
-Nginx → Express → MySQL. Browser tests covered all navigation tabs, filtered
-search, empty results, mobile width, and recovery after an API error.
+The [separation branch CI](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/44000065726)
+and [pull-request CI](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/44000095915)
+both passed for commit `95455391dcc79cfad04173a226103f6c7038ea5b`.
 
-## Remote validation and activation
+The GHCR images remain **Private**. GitHub signs into Octopus with OIDC and
+passes its temporary job token through required sensitive deployment prompts;
+no permanent GitHub PAT or Octopus API key is stored. Keep Docker Desktop and
+Ubuntu WSL running for the applications and Tentacle to remain available.
 
-- [Branch CI run 43994024399](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994024399)
-  passed all checks.
-- [Release build 43994590104](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994590104)
-  passed on attempt 2, published the three GHCR images, and produced
-  `sakila-deploy.0.0.3.zip` with their exact digests. Attempt 1 encountered a
-  transient GHCR `unknown blob` error; the workflow now retries image pushes.
-- Restarting Docker Desktop restored its Ubuntu WSL integration. Docker 29.6.1,
-  Compose 5.3.0, Python, and the active root-owned Tentacle were verified in
-  `Ubuntu`. That distro can reach the healthy application on port 8092.
-- The existing Octopus step now runs packaged `deploy.sh` on the `ecommerce-api`
-  target tag in Development. Database passwords are saved as sensitive variables.
-- A dedicated GitHub OIDC service account is configured for this repository's
-  main branch and version tags. The CD job supplies temporary package-read
-  credentials through sensitive prompted variables; the GHCR images stay private.
-- All three packages were explicitly changed to **Private** after GitHub initially
-  inherited public visibility from the source repository.
-- [Full pipeline run 43997079969](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43997079969)
-  passed both jobs and deployed release **0.0.4** to **Development** through the
-  polling Tentacle. The first CD attempt identified GitHub's immutable OIDC subject
-  format; both trust identities were corrected and only CD was retried.
-- [Octopus deployment task ServerTasks-110](https://karthik-devops-lab.octopus.app/app#/tasks/ServerTasks-110)
-  completed successfully at 19:43 CST. All three containers became healthy and
-  the target's smoke checks passed. Octopus shows a warning from Docker login's
-  temporary credential file; the script removes that directory on exit and the
-  GitHub token expires at job completion.
-- **16 API and Chromium checks passed against the actual Octopus-managed deployment**.
-  The browser displayed 1,000 films, 599 customers, 16,044 rentals and $67,406.56
-  revenue. Release state is recorded in `/opt/sakila/current`.
-- Existing release `0.0.2` has not been changed.
-
-Follow [OCTOPUS_SETUP.md](OCTOPUS_SETUP.md) for the exact runtime and permissions.
+Follow [OCTOPUS_SETUP.md](OCTOPUS_SETUP.md) for the current setup.
