@@ -1,1 +1,12 @@
-{}
+{
+  "name": "sakila-movie-rental-portal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "npm test --prefix backend",
+    "build": "npm run build --prefix frontend",
+    "start": "docker compose -f docker-compose.yml -f compose.build.yml up -d --build --wait --wait-timeout 240",
+    "stop": "docker compose down",
+    "logs": "docker compose logs -f --tail 100"
+  }
+}

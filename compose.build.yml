@@ -1,0 +1,8 @@
+# Build on developer machines and CI only; Octopus pulls tested images.
+services:
+  mysql:
+    build: ./database
+  backend:
+    build: ./backend
+  frontend:
+    build: ./frontend
