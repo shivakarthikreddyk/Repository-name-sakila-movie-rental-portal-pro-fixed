@@ -90,7 +90,7 @@ jobs:
           python -m pytest tests/test_stack.py -q
       - name: Sign into GHCR
         if: steps.metadata.outputs.publish == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
