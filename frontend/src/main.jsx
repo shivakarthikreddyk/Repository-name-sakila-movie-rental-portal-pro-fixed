@@ -13,34 +13,39 @@ function App() {
   const [dashboard, setDashboard] = useState(null);
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [submittedSearch, setSubmittedSearch] = useState('');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  async function loadDashboard() {
-    setLoading(true); setError('');
-    try {
-      const res = await fetch(`${API_BASE}/dashboard`);
-      if (!res.ok) throw new Error('Dashboard API failed');
-      setDashboard(await res.json());
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }
-
-  async function loadList(selectedTab = tab) {
-    setLoading(true); setError('');
-    try {
-      const query = search ? `?search=${encodeURIComponent(search)}` : '';
-      const res = await fetch(`${API_BASE}/${selectedTab}${query}`);
-      if (!res.ok) throw new Error(`${selectedTab} API failed`);
-      setRows(await res.json());
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  }
-
   useEffect(() => {
-    if (tab === 'dashboard') loadDashboard();
-    else loadList(tab);
-  }, [tab]);
+    const controller = new AbortController();
+    setLoading(true); setError(''); setRows([]); setDashboard(null);
+    async function load() {
+      try {
+        const query = tab !== 'dashboard' && submittedSearch
+          ? `?search=${encodeURIComponent(submittedSearch)}` : '';
+        const res = await fetch(`${API_BASE}/${tab}${query}`, { signal: controller.signal });
+        if (!res.ok) throw new Error(`Unable to load ${tab}. Please try again.`);
+        const data = await res.json();
+        if (!controller.signal.aborted) {
+          if (tab === 'dashboard') setDashboard(data);
+          else setRows(data);
+        }
+      } catch (e) {
+        if (!controller.signal.aborted) setError(e.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    load();
+    return () => controller.abort();
+  }, [tab, submittedSearch]);
+
+  function selectTab(nextTab) {
+    if (nextTab === tab) return;
+    setTab(nextTab); setSearch(''); setSubmittedSearch('');
+    setRows([]); setDashboard(null); setError(''); setLoading(true);
+  }
 
   function renderRows() {
     if (!rows.length) return <p className="empty">No records found.</p>;
@@ -52,15 +57,15 @@ function App() {
     <aside>
       <h1>Sakila Pro</h1>
       <p>Movie Rental Portal</p>
-      {['dashboard','movies','customers','rentals','actors','stores'].map(t => <button key={t} onClick={() => setTab(t)} className={tab===t?'active':''}>{t}</button>)}
+      {['dashboard','movies','customers','rentals','actors','stores'].map(t => <button key={t} onClick={() => selectTab(t)} aria-current={tab===t?'page':undefined} className={tab===t?'active':''}>{t}</button>)}
     </aside>
     <main>
       <header>
-        <div><h2>{tab.toUpperCase()}</h2><p>Docker + Kubernetes learning project</p></div>
-        {tab !== 'dashboard' && <div className="search"><input placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') loadList();}}/><button onClick={()=>loadList()}>Search</button></div>}
+        <div><h2>{tab.toUpperCase()}</h2><p>Explore movies, customers, and rental activity</p></div>
+        {tab !== 'dashboard' && <form className="search" onSubmit={e=>{e.preventDefault();setSubmittedSearch(search.trim());}}><input aria-label={`Search ${tab}`} placeholder="Search..." maxLength={100} value={search} onChange={e=>setSearch(e.target.value)}/><button type="submit">Search</button></form>}
       </header>
-      {loading && <div className="info">Loading...</div>}
-      {error && <div className="error">{error}</div>}
+      {loading && <div className="info" role="status">Loading...</div>}
+      {error && <div className="error" role="alert">{error}</div>}
       {tab === 'dashboard' && dashboard && <>
         <section className="cards">
           <Card title="Total Movies" value={dashboard.totalMovies} />
@@ -71,7 +76,7 @@ function App() {
         <section className="panel"><h3>Top Rented Movies</h3>{dashboard.topMovies?.map(m => <div className="bar" key={m.title}><span>{m.title}</span><strong>{m.rentals}</strong></div>)}</section>
         <section className="panel"><h3>Monthly Revenue</h3>{dashboard.monthlyRevenue?.map(m => <div className="bar" key={m.month}><span>{m.month}</span><strong>${Number(m.revenue).toFixed(2)}</strong></div>)}</section>
       </>}
-      {tab !== 'dashboard' && renderRows()}
+      {tab !== 'dashboard' && !loading && !error && renderRows()}
     </main>
   </div>;
 }
