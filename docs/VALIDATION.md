@@ -1,7 +1,8 @@
 # Local validation — 2026-11-16
 
-Validated from this checkout using Docker Desktop's Linux engine. The running
-local Compose project is `sakila-portal`, available at http://localhost:8092.
+Validated from this checkout using Docker Desktop's Linux engine. Octopus now
+manages the running `sakila-production` Compose project at http://localhost:8092.
+The local test project `sakila-portal` is stopped; its database volume is preserved.
 
 | Check | Result |
 | --- | --- |
@@ -31,7 +32,7 @@ search, empty results, mobile width, and recovery after an API error.
 - [Branch CI run 43994024399](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994024399)
   passed all checks.
 - [Release build 43994590104](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43994590104)
-  passed on attempt 2, published the three private GHCR images, and produced
+  passed on attempt 2, published the three GHCR images, and produced
   `sakila-deploy.0.0.3.zip` with their exact digests. Attempt 1 encountered a
   transient GHCR `unknown blob` error; the workflow now retries image pushes.
 - Restarting Docker Desktop restored its Ubuntu WSL integration. Docker 29.6.1,
@@ -42,7 +43,20 @@ search, empty results, mobile width, and recovery after an API error.
 - A dedicated GitHub OIDC service account is configured for this repository's
   main branch and version tags. The CD job supplies temporary package-read
   credentials through sensitive prompted variables; the GHCR images stay private.
-- Existing release `0.0.2` has not been changed. Octopus deployment has not yet
-  been verified; CI publishing success is not a deployment result.
+- All three packages were explicitly changed to **Private** after GitHub initially
+  inherited public visibility from the source repository.
+- [Full pipeline run 43997079969](https://github.com/shivakarthikreddyk/Repository-name-sakila-movie-rental-portal-pro-fixed/actions/runs/43997079969)
+  passed both jobs and deployed release **0.0.4** to **Development** through the
+  polling Tentacle. The first CD attempt identified GitHub's immutable OIDC subject
+  format; both trust identities were corrected and only CD was retried.
+- [Octopus deployment task ServerTasks-110](https://karthik-devops-lab.octopus.app/app#/tasks/ServerTasks-110)
+  completed successfully at 19:43 CST. All three containers became healthy and
+  the target's smoke checks passed. Octopus shows a warning from Docker login's
+  temporary credential file; the script removes that directory on exit and the
+  GitHub token expires at job completion.
+- **16 API and Chromium checks passed against the actual Octopus-managed deployment**.
+  The browser displayed 1,000 films, 599 customers, 16,044 rentals and $67,406.56
+  revenue. Release state is recorded in `/opt/sakila/current`.
+- Existing release `0.0.2` has not been changed.
 
 Follow [OCTOPUS_SETUP.md](OCTOPUS_SETUP.md) for the exact runtime and permissions.

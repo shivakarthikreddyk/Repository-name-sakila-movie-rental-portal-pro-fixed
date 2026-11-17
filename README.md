@@ -113,10 +113,15 @@ Follow [the Octopus and WSL2 setup guide](docs/OCTOPUS_SETUP.md) to configure th
 target, process, sensitive variables, and GitHub settings for
 `https://karthik-devops-lab.octopus.app`.
 
-CD is deliberately disabled until the repository variable `OCTOPUS_ENABLED`
-is set to `true`; CI and image publishing still work. A successful local test
-does not prove that a cloud release has deployed. The Octopus task must finish
-successfully before a live deployment can be reported as successful.
+CD is enabled in this repository. Release `0.0.4` completed through GitHub Actions
+and Octopus in Development, and API/Chromium checks passed against the deployed
+application. See [validation evidence](docs/VALIDATION.md). The three GHCR images
+are private. GitHub uses OIDC to sign into Octopus and supplies a temporary
+package-read token for the deployment; no permanent API-key secret is needed.
+
+For a new installation, keep `OCTOPUS_ENABLED=false` until target, variables,
+permissions, and OIDC trust are configured, then set it to `true`. Keep Docker
+Desktop and the Ubuntu WSL distro running so Tentacle can poll and serve the app.
 
 The existing `Jenkinsfile` and `k8s/` files are retained as historical examples.
 They are not part of this Docker Compose / Octopus pipeline and have not been

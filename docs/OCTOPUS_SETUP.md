@@ -155,6 +155,12 @@ Add GitHub Actions OIDC identities for this exact repository:
 - Branch identity: `main`
 - Tag identity: `v*`
 
+Enable **Use immutable subject claim** for both identities. This repository's
+owner ID is `63806131` and repository ID is `1303712587`. Its subject is
+`repo:shivakarthikreddyk@63806131/Repository-name-sakila-movie-rental-portal-pro-fixed@1303712587:ref:refs/heads/main`
+for the branch, or the same prefix followed by `:ref:refs/tags/v*` for tags.
+An identity using only owner/repository names will not match this repository.
+
 Do not authorize pull-request identities. The workflow uses
 `OctopusDeploy/login@v2` and short-lived tokens; no Octopus API-key secret is
 needed. The service-account GUID is an identifier, not a credential. The workflow declares
