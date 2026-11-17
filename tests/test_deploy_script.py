@@ -37,7 +37,7 @@ if mode == 'rollout' and 'up' in sys.argv and '--no-deps' not in sys.argv: sys.e
     env = dict(os.environ, PATH=f'{fake_bin}{os.pathsep}{os.environ["PATH"]}',
                DB_PASSWORD='sensitive-test-app', MYSQL_ROOT_PASSWORD='sensitive-test-root',
                DEPLOY_ROOT=str(tmp_path / 'target'), DOCKER_CALLS=str(tmp_path / 'docker.jsonl'),
-               APP_PORT='8092', GHCR_USERNAME='', GHCR_TOKEN='')
+               APP_PORT='8093', GHCR_USERNAME='', GHCR_TOKEN='')
     return package, env
 
 

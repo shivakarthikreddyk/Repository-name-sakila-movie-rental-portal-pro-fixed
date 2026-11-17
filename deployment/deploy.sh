@@ -18,7 +18,7 @@ if declare -F get_octopusvariable >/dev/null; then
 fi
 : "${DB_PASSWORD:?Set Sakila.DbPassword (sensitive)}"
 : "${MYSQL_ROOT_PASSWORD:?Set Sakila.RootPassword (sensitive)}"
-export APP_PORT="${APP_PORT:-8092}"
+export APP_PORT="${APP_PORT:-8093}"
 export APP_BIND_ADDRESS="${APP_BIND_ADDRESS:-127.0.0.1}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-sakila-production}"
 deploy_root="${DEPLOY_ROOT:-/opt/sakila}"

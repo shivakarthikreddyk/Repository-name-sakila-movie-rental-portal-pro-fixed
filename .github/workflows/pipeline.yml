@@ -26,9 +26,9 @@ jobs:
       publish: ${{ steps.metadata.outputs.publish }}
     env:
       COMPOSE_PROJECT_NAME: sakila-ci
-      APP_PORT: '8092'
+      APP_PORT: '8093'
       APP_BIND_ADDRESS: 127.0.0.1
-      SAKILA_BASE_URL: http://127.0.0.1:8092
+      SAKILA_BASE_URL: http://127.0.0.1:8093
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -158,6 +158,7 @@ jobs:
           : "${OCTOPUS_SERVICE_ACCOUNT_ID:?Set repository variable OCTOPUS_SERVICE_ACCOUNT_ID}"
           : "${OCTOPUS_PROJECT:?Set repository variable OCTOPUS_PROJECT}"
           : "${OCTOPUS_ENVIRONMENT:?Set repository variable OCTOPUS_ENVIRONMENT}"
+          [[ "$OCTOPUS_PROJECT" == Sakila-Movie-Rental-Portal ]] || { echo "Refusing to deploy Sakila to another Octopus project"; exit 1; }
           [[ "$OCTOPUS_ENVIRONMENT" != *$'\n'* ]] || { echo 'Configure one environment per deployment job'; exit 1; }
       - name: Authenticate to Octopus with GitHub OIDC
         uses: OctopusDeploy/login@v2

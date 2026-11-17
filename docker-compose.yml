@@ -48,7 +48,7 @@ services:
     image: ${FRONTEND_IMAGE:-sakila-frontend:local}
     restart: unless-stopped
     ports:
-      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8092}:80"
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8093}:80"
     depends_on:
       backend:
         condition: service_healthy
