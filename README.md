@@ -4,6 +4,10 @@ React + Express + MySQL, delivered by GitHub Actions, GHCR, and Octopus Cloud
 to an Ubuntu WSL2 polling Tentacle. The application uses **Node.js**;
 **Python/pytest** verifies the APIs, browser, and deployment tooling.
 
+Sakila deploys only to **Sakila-Movie-Rental-Portal** on port **8093**.
+**Ecommerce-DevOps-Lab** is a separate Python project on port **8092**.
+They share the WSL2 host, with separate Octopus processes and releases.
+
 ```mermaid
 flowchart LR
     A[Developer: Ubuntu WSL2] --> B[GitHub repository]
@@ -13,7 +17,7 @@ flowchart LR
     E --> F[GHCR: tested versioned images]
     F --> G[Octopus Cloud: versioned release]
     G --> H[Ubuntu WSL2: polling Tentacle]
-    H --> I[Docker Compose: port 8092]
+    H --> I[Docker Compose: port 8093]
     I --> J[Nginx and React]
     J --> K[Express API]
     K --> L[MySQL: persistent volume]
@@ -34,9 +38,9 @@ In PowerShell use `python scripts/init-env.py`; the Docker command is identical.
 The setup creates an ignored `.env` with random passwords without replacing
 existing credentials. Never commit this file.
 
-- Portal: http://localhost:8092
-- Database readiness: http://localhost:8092/api/health
-- Backend liveness: http://localhost:8092/api/live
+- Portal: http://localhost:8093
+- Database readiness: http://localhost:8093/api/health
+- Backend liveness: http://localhost:8093/api/live
 
 Only Nginx is published on the host. The browser calls `/api` through Nginx;
 MySQL and Express communicate on private Compose networks. Local access is
@@ -88,7 +92,7 @@ The workflow is [.github/workflows/pipeline.yml](.github/workflows/pipeline.yml)
 
 1. Pushes and pull requests run Node unit tests and frontend builds.
 2. CI builds the three Docker images, starts the full stack, and runs pytest
-   API and Chromium tests through port 8092.
+   API and Chromium tests through port 8093.
 3. CI recreates containers and checks that the database data survives.
 4. Successful builds on the default branch or `vMAJOR.MINOR.PATCH` tags publish
    those same tested images to GHCR. Feature branches and PRs do not publish.
@@ -100,8 +104,8 @@ Images are named `ghcr.io/<owner>/<repository>-frontend`, `-backend`, and
 `-database`, with unique `build-<run-id>-<attempt>` tags. Releases resolve
 images by digest, so a moved tag cannot change an existing release.
 Default-branch release numbers use `0.1.<run-number>-ci.<attempt>`.
-A tag such as `v0.0.3` creates release `0.0.3`. Existing release `0.0.2` is
-not overwritten or assumed to be compatible with the new deployment package.
+A tag such as `v0.0.5` creates Sakila release `0.0.5`. Ecommerce release
+`0.0.2` belongs to its separate project and is not used by this pipeline.
 
 Base images are pinned by digest, npm uses committed lockfiles, and Dependabot
 proposes dependency updates. Updating the MySQL base image requires checking
@@ -113,9 +117,9 @@ Follow [the Octopus and WSL2 setup guide](docs/OCTOPUS_SETUP.md) to configure th
 target, process, sensitive variables, and GitHub settings for
 `https://karthik-devops-lab.octopus.app`.
 
-CD is enabled in this repository. Release `0.0.4` completed through GitHub Actions
-and Octopus in Development, and API/Chromium checks passed against the deployed
-application. See [validation evidence](docs/VALIDATION.md). The three GHCR images
+The pipeline deploys to the dedicated Sakila project in Development.
+The workflow rejects any other `OCTOPUS_PROJECT` value, and its Octopus role
+is scoped to Sakila. See [validation evidence](docs/VALIDATION.md). The three GHCR images
 are private. GitHub uses OIDC to sign into Octopus and supplies a temporary
 package-read token for the deployment; no permanent API-key secret is needed.
 

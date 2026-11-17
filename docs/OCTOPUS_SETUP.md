@@ -1,10 +1,10 @@
 # GitHub Actions → GHCR → Octopus → Ubuntu WSL2
 
 This guide connects the supplied application to
-`https://karthik-devops-lab.octopus.app` using the existing **Default** space
-(`Spaces-1`), **Ecommerce-DevOps-Lab** project, and **Development** environment.
-These names were confirmed from the supplied Octopus screenshots. QA and
-Production are visible but are not targeted by this pipeline.
+`https://karthik-devops-lab.octopus.app` using the **Default** space
+(`Spaces-1`), dedicated **Sakila-Movie-Rental-Portal** project, and **Development** environment.
+Ecommerce-DevOps-Lab is a separate Python application and owns port 8092.
+Sakila owns port 8093. QA and Production are not targeted by this pipeline.
 
 ## 1. Prepare the actual Tentacle target
 
@@ -38,16 +38,16 @@ membership takes effect. Docker access permits control of containers and host mo
 
 In Octopus **Infrastructure → Deployment Targets**, verify the existing Linux
 polling Tentacle is healthy, assigned to the intended environment, and has the
-target role/tag `ecommerce-api` (the existing target's tag). Prefer Octopus's generated Linux polling
+target role/tag `sakila-portal` (a separate tag for this application). Prefer Octopus's generated Linux polling
 installation/registration script if creating a new target; keep credentials out of Git.
 
-Only one application can own port 8092. If the local development Compose stack
+Only one application can own port 8093. If the local development Compose stack
 uses the same Docker daemon, stop it with `docker compose down` before the first
 Octopus deployment. Its data remains in the development project's volume.
 
 ## 2. Configure the project variables
 
-Select the existing **Ecommerce-DevOps-Lab** Octopus project and verify it is
+Select the existing **Sakila-Movie-Rental-Portal** Octopus project and verify it is
 **non-version-controlled**. This package-based workflow snapshots the scripts in its ZIP;
 it does not require Octopus Config as Code.
 
@@ -57,7 +57,7 @@ Add these project variables, scoped to the target environment as appropriate:
 | --- | --- | --- |
 | `Sakila.DbPassword` | A unique application database password | Yes |
 | `Sakila.RootPassword` | A separate unique database root password | Yes |
-| `Sakila.Port` | `8092` | No |
+| `Sakila.Port` | `8093` | No |
 | `Sakila.BindAddress` | `127.0.0.1` for local Windows/WSL access | No |
 | `Sakila.DeployRoot` | `/opt/sakila` | No |
 | `Sakila.ComposeProject` | `sakila-production` | No |
@@ -86,10 +86,10 @@ The workflow publishes `sakila-deploy.<version>.zip` into the **Octopus built-in
 package feed**. GHCR holds Docker images; the built-in feed holds scripts and
 the release's image digest manifest.
 
-The existing second **Run a Script** step is now named `02 - Deploy Sakila Docker Compose`:
+In the Sakila project, the second **Run a Script** step is named `02 - Deploy Sakila Docker Compose`:
 
 1. Execution location: **Run on each deployment target**.
-2. Target role/tag: `ecommerce-api`, scoped to Development.
+2. Target role/tag: `sakila-portal`, scoped to Development.
 3. Script source: **Script file inside a package**.
 4. Package feed: **Octopus Server (built-in)**.
 5. Package ID: **`sakila-deploy`**.
@@ -115,7 +115,7 @@ The deployment script:
   concurrent target updates.
 - Uses temporary GHCR authentication, pulls images before replacing containers,
   and waits for MySQL, Express, and Nginx readiness.
-- Checks the frontend document, dashboard, and all five API lists through port 8092.
+- Checks the frontend document, dashboard, and all five API lists through port 8093.
 - Records successful releases under `/opt/sakila/releases/` and updates `current`.
 - Restores the previous frontend/backend on a failed update and **still fails
   the Octopus task**. It never deletes or rolls back the database volume.
@@ -133,12 +133,12 @@ Under **Repository → Settings → Secrets and variables → Actions**, create:
 | Variable | `OCTOPUS_SERVICE_ACCOUNT_ID` | The GUID from the dedicated Octopus service account's OpenID Connect section |
 | Variable | `OCTOPUS_URL` | `https://karthik-devops-lab.octopus.app` |
 | Variable | `OCTOPUS_SPACE` | `Default` |
-| Variable | `OCTOPUS_PROJECT` | `Ecommerce-DevOps-Lab` |
+| Variable | `OCTOPUS_PROJECT` | `Sakila-Movie-Rental-Portal` |
 | Variable | `OCTOPUS_ENVIRONMENT` | `Development` |
 | Variable | `OCTOPUS_ENABLED` | `true`, after steps 1–3 are complete |
 
 Use a dedicated Octopus service account with package publishing rights in Default,
-and release/deployment/task-read rights limited to Ecommerce-DevOps-Lab and
+and release/deployment/task-read rights limited to Sakila-Movie-Rental-Portal and
 Development. The configured account is `sakila-github-actions`, assigned to the
 Default-space team `Sakila CI Delivery`. Its custom role, `Sakila Pipeline Publisher`,
 contains `BuiltInFeedDownload`, `BuiltInFeedPush`, `DeploymentCreate`,
@@ -172,7 +172,7 @@ The GitHub CLI can set the non-sensitive values:
 ```bash
 gh variable set OCTOPUS_URL --body 'https://karthik-devops-lab.octopus.app'
 gh variable set OCTOPUS_SPACE --body 'Default'
-gh variable set OCTOPUS_PROJECT --body 'Ecommerce-DevOps-Lab'
+gh variable set OCTOPUS_PROJECT --body 'Sakila-Movie-Rental-Portal'
 gh variable set OCTOPUS_ENVIRONMENT --body 'Development'
 gh variable set OCTOPUS_SERVICE_ACCOUNT_ID --body '<service-account-guid>'
 gh variable set OCTOPUS_ENABLED --body 'true'
@@ -182,11 +182,11 @@ gh variable set OCTOPUS_ENABLED --body 'true'
 
 Merge the reviewed pipeline changes to the default branch. It will test,
 publish, package, and deploy automatically when Octopus is enabled. For a stable
-version after the existing `0.0.2`, create a new tag on the intended commit:
+version, create a new unused tag on the intended commit:
 
 ```bash
-git tag v0.0.4
-git push origin v0.0.4
+git tag v0.0.5
+git push origin v0.0.5
 ```
 
 Do not move an existing release tag. Release package uploads fail if a version
@@ -194,7 +194,7 @@ already exists. A rerun after a partially successful stable release may require
 deploying that existing release from Octopus or choosing a new version.
 
 Confirm the GitHub `octopus` job and Octopus deployment task both succeed.
-Open `http://localhost:8092` and `http://localhost:8092/api/health` on the target
+Open `http://localhost:8093` and `http://localhost:8093/api/health` on the target
 machine. `localhost` on GitHub's hosted runner is not your Windows machine;
 post-deployment checks therefore run on the Tentacle.
 
@@ -211,7 +211,7 @@ configure it in Octopus rather than embedding target credentials into CI.
 | Docker socket permission denied | Docker access for the **Tentacle service user** |
 | GHCR unauthorized | Target token has `read:packages`, correct package/repository access, and required organization authorization |
 | MySQL unhealthy / access denied | Passwords match the existing volume; inspect database logs without removing the volume |
-| Port 8092 in use | Stop the local stack or choose another deployment port |
+| Port 8093 in use | Stop the local stack or choose another deployment port |
 | Nginx 502 | Backend readiness and Compose DNS/network; do not point at host `localhost:5000` |
 
 ## References
