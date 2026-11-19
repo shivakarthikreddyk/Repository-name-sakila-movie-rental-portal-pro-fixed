@@ -64,7 +64,7 @@ jobs:
       # approval step pauses before any container is changed. CI cannot approve it.
       - name: Request Production deployment with Octopus approval
         id: deploy
-        uses: OctopusDeploy/deploy-release-action@v3
+        uses: OctopusDeploy/deploy-release-action@v4
         with:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ inputs.release }}
