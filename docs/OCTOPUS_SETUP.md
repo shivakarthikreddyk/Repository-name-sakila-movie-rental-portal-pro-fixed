@@ -110,9 +110,18 @@ Keep Ecommerce on its original lifecycle.
 
 The Sakila process has validation, **Approve Sakila Production**, then
 **02 - Deploy Sakila Docker Compose**. Configure the approval step for Production
-only, responsible team **Octopus Administrators**, required/non-skippable,
+only, responsible team **Sakila Production Approvers**, required/non-skippable,
 blocking other deployments, and preventing AI agents from actioning it.
 The CI service account must not belong to that team or have intervention permissions.
+
+The Default-space approver team contains only the personal human account. Its
+**Sakila Production Approval** role has `EnvironmentView`, `ProjectView`,
+`TaskView`, `InterruptionView`, and `InterruptionViewSubmitResponsible`, scoped
+to Sakila-Movie-Rental-Portal and Production. Do not use Octopus Administrators
+as the responsible team unless the intended human approver actually belongs
+to it. A team with only `octoadmin` leaves the personal account unable to assign
+or proceed. After changing the gate, create a fresh release: existing releases
+retain the old process snapshot.
 
 Configure the Docker **Run a Script** step:
 
@@ -230,7 +239,7 @@ post-deployment checks therefore run on the Tentacle.
 
 After Development and QA succeed, run **Promote Sakila release to Production**
 from GitHub Actions on `main`, with the exact existing release number. Approve
-the pending task in Octopus as an Octopus Administrator. The same image digests
+the pending task in Octopus as a member of Sakila Production Approvers. The same image digests
 are promoted, with no rebuild. The Production workflow supplies a fresh temporary
 GHCR token and waits up to 350 minutes within a six-hour job. If the job times out,
 cancel the pending Octopus deployment and rerun the promotion workflow before
