@@ -15,7 +15,7 @@ def deployment(tmp_path):
     package = tmp_path / 'package'
     package.mkdir()
     for name in ['deploy.sh', 'release-env.py']:
-        shutil.copy(ROOT / 'deployment' / name, package / name)
+        shutil.copy(ROOT / 'deployment' / ('compose-deploy.sh' if name == 'deploy.sh' else name), package / name)
     shutil.copy(ROOT / 'docker-compose.yml', package / 'docker-compose.yml')
     (package / 'smoke.py').write_text('print("smoke checked")\n')
     (package / 'release.json').write_text(json.dumps({'version': '0.0.3', 'images': {
