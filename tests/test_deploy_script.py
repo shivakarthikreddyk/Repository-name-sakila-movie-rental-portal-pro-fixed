@@ -45,7 +45,8 @@ def run(deployment, **changes):
     package, env = deployment
     result = subprocess.run(['bash', str(package / 'deploy.sh')], env=dict(env, **changes),
                             capture_output=True, text=True, timeout=20)
-    calls = [json.loads(line) for line in Path(env['DOCKER_CALLS']).read_text().splitlines()]
+    log = Path(env['DOCKER_CALLS'])
+    calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
     assert not any('down' in call for call in calls)
     assert env['DB_PASSWORD'] not in result.stdout + result.stderr
     return result, calls
@@ -81,3 +82,34 @@ def test_rollout_failure_restores_previous_application_and_still_fails(deploymen
     assert rollback[0][-2:] == ['backend', 'frontend']
     assert 'mysql' not in rollback[0]
     assert (target / 'current').resolve() == previous
+
+
+@pytest.mark.parametrize('environment,project,port,compose,deploy_root', [
+    ('QA', 'Sakila-Movie-Rental-Portal', '8093', 'sakila-production', '/opt/sakila'),
+    ('Production', 'Sakila-Movie-Rental-Portal', '8094', 'sakila-qa', '/opt/sakila-qa'),
+    ('Development', 'Sakila-Movie-Rental-Portal', '8092', 'sakila-production', '/opt/sakila'),
+    ('Production', 'Ecommerce-DevOps-Lab', '8095', 'sakila-prod', '/opt/sakila-prod'),
+    ('Unknown', 'Sakila-Movie-Rental-Portal', '8093', 'sakila-production', '/opt/sakila'),
+])
+def test_wrong_environment_scope_never_reaches_docker(deployment, environment, project,
+                                                     port, compose, deploy_root):
+    package, env = deployment
+    helper = package / 'octopus-helper.sh'
+    helper.write_text('''get_octopusvariable() {
+      case "$1" in
+        Octopus.Environment.Name) printf '%s' "$TEST_ENVIRONMENT" ;;
+        Octopus.Project.Name) printf '%s' "$TEST_PROJECT" ;;
+        Sakila.Port) printf '%s' "$APP_PORT" ;;
+        Sakila.ComposeProject) printf '%s' "$COMPOSE_PROJECT_NAME" ;;
+        Sakila.DeployRoot) printf '%s' "$DEPLOY_ROOT" ;;
+        Sakila.BindAddress) printf '127.0.0.1' ;;
+        Sakila.DbPassword) printf '%s' "$DB_PASSWORD" ;;
+        Sakila.RootPassword) printf '%s' "$MYSQL_ROOT_PASSWORD" ;;
+      esac
+    }
+''')
+    result, calls = run(deployment, BASH_ENV=str(helper), TEST_ENVIRONMENT=environment,
+                        TEST_PROJECT=project, APP_PORT=port,
+                        COMPOSE_PROJECT_NAME=compose, DEPLOY_ROOT=deploy_root)
+    assert result.returncode != 0
+    assert calls == []

@@ -2,9 +2,10 @@
 
 This guide connects the supplied application to
 `https://karthik-devops-lab.octopus.app` using the **Default** space
-(`Spaces-1`), dedicated **Sakila-Movie-Rental-Portal** project, and **Development** environment.
+(`Spaces-1`), dedicated **Sakila-Movie-Rental-Portal** project, and sequential
+**Development → QA → Production** environments.
 Ecommerce-DevOps-Lab is a separate Python application and owns port 8092.
-Sakila owns port 8093. QA and Production are not targeted by this pipeline.
+Sakila uses ports 8093, 8094, and 8095. Production requires human approval.
 
 ## 1. Prepare the actual Tentacle target
 
@@ -37,7 +38,7 @@ Docker access and ownership of `/opt/sakila`, then restart its service so group
 membership takes effect. Docker access permits control of containers and host mounts.
 
 In Octopus **Infrastructure → Deployment Targets**, verify the existing Linux
-polling Tentacle is healthy, assigned to the intended environment, and has the
+polling Tentacle is healthy, assigned to Development, QA, and Production, and has the
 target role/tag `sakila-portal` (a separate tag for this application). Prefer Octopus's generated Linux polling
 installation/registration script if creating a new target; keep credentials out of Git.
 
@@ -64,6 +65,21 @@ Add these project variables, scoped to the target environment as appropriate:
 | `GHCR.Username` | Required prompted variable; supplied by the workflow as `github.actor` | No |
 | `GHCR.Token` | Required prompted variable; supplied by the workflow as its temporary `GITHUB_TOKEN` | Yes |
 
+Use these exact environment-scoped overrides. The deployment script rejects
+any other project/environment/port/Compose-project/directory combination before
+running Docker. All three bind to `127.0.0.1`.
+
+| Octopus environment | `Sakila.Port` | `Sakila.ComposeProject` | `Sakila.DeployRoot` | Database volume |
+| --- | --- | --- | --- | --- |
+| Development | 8093 | sakila-production | /opt/sakila | sakila-production_mysql-data |
+| QA | 8094 | sakila-qa | /opt/sakila-qa | sakila-qa_mysql-data |
+| Production | 8095 | sakila-prod | /opt/sakila-prod | sakila-prod_mysql-data |
+
+Development keeps its legacy Compose name `sakila-production` to preserve the
+existing database. It is still the Development environment. Give QA and Production
+their own sensitive `Sakila.DbPassword` and `Sakila.RootPassword` values.
+New environments initialize their own sample databases; they do not copy Development data.
+
 Keep the three GHCR packages private. Configure both GHCR variables as
 **prompted and required**, with no stored default; make `GHCR.Token` sensitive.
 The CD job has `packages: read` and passes its temporary `GITHUB_TOKEN` to
@@ -86,15 +102,28 @@ The workflow publishes `sakila-deploy.<version>.zip` into the **Octopus built-in
 package feed**. GHCR holds Docker images; the built-in feed holds scripts and
 the release's image digest manifest.
 
-In the Sakila project, the second **Run a Script** step is named `02 - Deploy Sakila Docker Compose`:
+Assign the dedicated **Sakila Development QA Production** lifecycle to Sakila.
+Create three ordered phases, each containing only its matching environment,
+with **All must complete** and manually queued deployment. GitHub queues
+Development and QA in sequence; the separate promotion workflow queues Production.
+Keep Ecommerce on its original lifecycle.
+
+The Sakila process has validation, **Approve Sakila Production**, then
+**02 - Deploy Sakila Docker Compose**. Configure the approval step for Production
+only, responsible team **Octopus Administrators**, required/non-skippable,
+blocking other deployments, and preventing AI agents from actioning it.
+The CI service account must not belong to that team or have intervention permissions.
+
+Configure the Docker **Run a Script** step:
 
 1. Execution location: **Run on each deployment target**.
-2. Target role/tag: `sakila-portal`, scoped to Development.
+2. Target role/tag: `sakila-portal`, scoped to Development, QA, and Production.
 3. Script source: **Script file inside a package**.
 4. Package feed: **Octopus Server (built-in)**.
 5. Package ID: **`sakila-deploy`**.
 6. Script file: **`deploy.sh`** (at the ZIP root).
 7. Language: **Bash**.
+8. Required: prevent this step from being skipped. Run only after previous steps succeed.
 
 Use this script directly as the package script so Octopus's
 `get_octopusvariable` helper is available. Do not wrap it in an unrelated
@@ -111,12 +140,12 @@ that ZIP under **Library → Packages**. Then configure the step and enable CD.
 
 The deployment script:
 
-- Validates variables and digest references, then locks `/opt/sakila` to prevent
+- Validates environment isolation and digest references, then locks the environment's deployment directory to prevent
   concurrent target updates.
 - Uses temporary GHCR authentication, pulls images before replacing containers,
   and waits for MySQL, Express, and Nginx readiness.
-- Checks the frontend document, dashboard, and all five API lists through port 8093.
-- Records successful releases under `/opt/sakila/releases/` and updates `current`.
+- Checks the frontend document, dashboard, and all five API lists through that environment's port.
+- Records successful releases under its deployment directory's `releases/` and updates `current`.
 - Restores the previous frontend/backend on a failed update and **still fails
   the Octopus task**. It never deletes or rolls back the database volume.
 
@@ -139,14 +168,15 @@ Under **Repository → Settings → Secrets and variables → Actions**, create:
 
 Use a dedicated Octopus service account with package publishing rights in Default,
 and release/deployment/task-read rights limited to Sakila-Movie-Rental-Portal and
-Development. The configured account is `sakila-github-actions`, assigned to the
+Development, QA, and Production. The configured account is `sakila-github-actions`, assigned to the
 Default-space team `Sakila CI Delivery`. Its custom role, `Sakila Pipeline Publisher`,
 contains `BuiltInFeedDownload`, `BuiltInFeedPush`, `DeploymentCreate`,
 `DeploymentView`, `EnvironmentView`, `FeedView`, `LibraryVariableSetView`,
 `LifecycleView`, `ProcessView`, `ProjectView`, `ReleaseCreate`, `ReleaseView`,
 `TargetTagView`, `TaskView`, and `TenantView`. The role assignment is scoped to
-the project and Development; package permissions apply to the space's built-in feed.
-It grants no editing, deletion, account administration, or runbook execution.
+the project and those three environments; package permissions apply to the space's built-in feed.
+It grants no editing, deletion, account administration, manual intervention approval,
+or runbook execution.
 
 Add GitHub Actions OIDC identities for this exact repository:
 
@@ -198,8 +228,18 @@ Open `http://localhost:8093` and `http://localhost:8093/api/health` on the targe
 machine. `localhost` on GitHub's hosted runner is not your Windows machine;
 post-deployment checks therefore run on the Tentacle.
 
-Octopus environments/lifecycles control promotion. To add production approval,
-configure it in Octopus rather than embedding target credentials into CI.
+After Development and QA succeed, run **Promote Sakila release to Production**
+from GitHub Actions on `main`, with the exact existing release number. Approve
+the pending task in Octopus as an Octopus Administrator. The same image digests
+are promoted, with no rebuild. The Production workflow supplies a fresh temporary
+GHCR token and waits up to 350 minutes within a six-hour job. If the job times out,
+cancel the pending Octopus deployment and rerun the promotion workflow before
+approving; an expired job token cannot pull private images.
+
+Verify `http://localhost:8094/api/health` and `http://localhost:8095/api/health`,
+as well as the frontend pages. A green historical task with a skipped Docker
+step is not evidence of an environment deployment. Check actual container
+health, port bindings, and each environment's separate MySQL volume.
 
 ## Troubleshooting
 
