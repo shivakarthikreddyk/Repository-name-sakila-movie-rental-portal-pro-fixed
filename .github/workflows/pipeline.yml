@@ -136,7 +136,7 @@ jobs:
     needs: test-and-publish
     if: needs.test-and-publish.outputs.publish == 'true' && vars.OCTOPUS_ENABLED == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 50
     permissions:
       contents: read
       id-token: write
@@ -159,7 +159,7 @@ jobs:
           : "${OCTOPUS_PROJECT:?Set repository variable OCTOPUS_PROJECT}"
           : "${OCTOPUS_ENVIRONMENT:?Set repository variable OCTOPUS_ENVIRONMENT}"
           [[ "$OCTOPUS_PROJECT" == Sakila-Movie-Rental-Portal ]] || { echo "Refusing to deploy Sakila to another Octopus project"; exit 1; }
-          [[ "$OCTOPUS_ENVIRONMENT" != *$'\n'* ]] || { echo 'Configure one environment per deployment job'; exit 1; }
+          [[ "$OCTOPUS_ENVIRONMENT" == Development ]] || { echo 'New releases must start in Development'; exit 1; }
       - name: Authenticate to Octopus with GitHub OIDC
         uses: OctopusDeploy/login@v2
         with:
@@ -180,7 +180,7 @@ jobs:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ needs.test-and-publish.outputs.version }}
           packages: sakila-deploy:${{ needs.test-and-publish.outputs.version }}
-          release_notes: Commit ${{ github.sha }}; tested images are pinned in release.json.
+          release_notes: Commit ${{ github.sha }}; tested images are pinned in release.json. Sakila isolated environments v1.
       - name: Deploy through the polling Tentacle
         id: deploy
         uses: OctopusDeploy/deploy-release-action@v3
@@ -202,3 +202,24 @@ jobs:
           TASK_STATE: ${{ steps.wait.outputs.task_state }}
         run: |
           [[ "$TASK_STATE" == Success ]] || { echo "Octopus deployment ended with state: $TASK_STATE"; exit 1; }
+      - name: Promote the same release to QA
+        id: qa
+        uses: OctopusDeploy/deploy-release-action@v3
+        with:
+          project: ${{ vars.OCTOPUS_PROJECT }}
+          release_number: ${{ steps.release.outputs.release_number }}
+          environments: QA
+          variables: |
+            GHCR.Username:${{ github.actor }}
+            GHCR.Token:${{ secrets.GITHUB_TOKEN }}
+      - name: Wait for QA deployment and smoke checks
+        id: qa_wait
+        uses: OctopusDeploy/await-task-action@v3
+        with:
+          server_task_id: ${{ fromJson(steps.qa.outputs.server_tasks)[0].serverTaskId }}
+          timeout_after: 1200
+      - name: Require successful QA before Production promotion
+        env:
+          TASK_STATE: ${{ steps.qa_wait.outputs.task_state }}
+        run: |
+          [[ "$TASK_STATE" == Success ]] || { echo "QA deployment ended with state: $TASK_STATE"; exit 1; }

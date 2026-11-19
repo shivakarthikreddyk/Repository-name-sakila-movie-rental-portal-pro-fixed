@@ -15,6 +15,20 @@ if declare -F get_octopusvariable >/dev/null; then
   COMPOSE_PROJECT_NAME="$(get_octopusvariable 'Sakila.ComposeProject')"
   GHCR_USERNAME="$(get_octopusvariable 'GHCR.Username')"
   GHCR_TOKEN="$(get_octopusvariable 'GHCR.Token')"
+  # Reject a mis-scoped environment before Docker can modify any container.
+  environment="$(get_octopusvariable 'Octopus.Environment.Name')"
+  project="$(get_octopusvariable 'Octopus.Project.Name')"
+  [[ "$project" == Sakila-Movie-Rental-Portal ]] || { echo 'Wrong Octopus project'; exit 1; }
+  case "$environment" in
+    Development) expected='8093|sakila-production|/opt/sakila' ;;
+    QA) expected='8094|sakila-qa|/opt/sakila-qa' ;;
+    Production) expected='8095|sakila-prod|/opt/sakila-prod' ;;
+    *) echo 'Unsupported Sakila environment'; exit 1 ;;
+  esac
+  [[ "$APP_PORT|$COMPOSE_PROJECT_NAME|$DEPLOY_ROOT" == "$expected" ]] || {
+    echo "Environment isolation settings do not match $environment"; exit 1;
+  }
+  [[ "$APP_BIND_ADDRESS" == 127.0.0.1 ]] || { echo 'Expected local-only binding'; exit 1; }
 fi
 : "${DB_PASSWORD:?Set Sakila.DbPassword (sensitive)}"
 : "${MYSQL_ROOT_PASSWORD:?Set Sakila.RootPassword (sensitive)}"

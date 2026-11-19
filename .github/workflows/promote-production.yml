@@ -1,0 +1,85 @@
+name: Promote Sakila release to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Existing Sakila release that successfully passed Development and QA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+concurrency:
+  group: sakila-production-promotion
+  cancel-in-progress: false
+
+jobs:
+  production:
+    if: github.ref == 'refs/heads/main' && vars.OCTOPUS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      OCTOPUS_URL: ${{ vars.OCTOPUS_URL }}
+      OCTOPUS_SPACE: ${{ vars.OCTOPUS_SPACE }}
+      OCTOPUS_PROJECT: ${{ vars.OCTOPUS_PROJECT }}
+      RELEASE: ${{ inputs.release }}
+    steps:
+      - name: Validate promotion destination and release
+        shell: bash
+        run: |
+          [[ "$OCTOPUS_PROJECT" == Sakila-Movie-Rental-Portal ]] || exit 1
+          [[ "$RELEASE" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || exit 1
+      - name: Authenticate with GitHub OIDC
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ vars.OCTOPUS_URL }}
+          service_account_id: ${{ vars.OCTOPUS_SERVICE_ACCOUNT_ID }}
+      - name: Reject releases created before environment isolation
+        shell: python
+        run: |
+          import json, os
+          from urllib.request import Request, urlopen
+          from urllib.parse import quote
+          base = os.environ['OCTOPUS_URL'].rstrip('/')
+          headers = {'Authorization': 'Bearer ' + os.environ['OCTOPUS_ACCESS_TOKEN']}
+          def get(path):
+              with urlopen(Request(base + path, headers=headers), timeout=30) as response:
+                  return json.load(response)
+          # These IDs identify this lab's dedicated Sakila project and Default space.
+          release = get('/api/Spaces-1/projects/Projects-21/releases/' + quote(os.environ['RELEASE'], safe=''))
+          if release['ProjectId'] != 'Projects-21' or 'Sakila isolated environments v1.' not in (release.get('ReleaseNotes') or ''):
+              raise SystemExit('Choose a new release created by the isolated-environment pipeline.')
+          process = get('/api/Spaces-1/deploymentprocesses/' + quote(release['ProjectDeploymentProcessSnapshotId'], safe=''))
+          steps = process['Steps']
+          gate = next((i for i, s in enumerate(steps) if s['Name'] == 'Approve Sakila Production'), None)
+          deploy = next((i for i, s in enumerate(steps) if s['Name'] == '02 - Deploy Sakila Docker Compose'), None)
+          if gate is None or deploy is None or gate >= deploy:
+              raise SystemExit('Release snapshot lacks the Production approval before deployment.')
+          print('Release contains the isolated-environment marker and Production approval gate.')
+      # Octopus lifecycle requires Development and QA success. The Production-only
+      # approval step pauses before any container is changed. CI cannot approve it.
+      - name: Request Production deployment with Octopus approval
+        id: deploy
+        uses: OctopusDeploy/deploy-release-action@v3
+        with:
+          project: ${{ vars.OCTOPUS_PROJECT }}
+          release_number: ${{ inputs.release }}
+          environments: Production
+          variables: |
+            GHCR.Username:${{ github.actor }}
+            GHCR.Token:${{ secrets.GITHUB_TOKEN }}
+      - name: Wait for approval and deployment
+        id: wait
+        uses: OctopusDeploy/await-task-action@v3
+        with:
+          server_task_id: ${{ fromJson(steps.deploy.outputs.server_tasks)[0].serverTaskId }}
+          timeout_after: 21000
+      - name: Require successful Production deployment
+        env:
+          TASK_STATE: ${{ steps.wait.outputs.task_state }}
+        run: |
+          [[ "$TASK_STATE" == Success ]] || { echo "Production task ended with state: $TASK_STATE"; exit 1; }
