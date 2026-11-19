@@ -33,7 +33,7 @@ def main():
     package = output / f'sakila-deploy.{args.version}.zip'
     with zipfile.ZipFile(package, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(root / 'docker-compose.yml', 'docker-compose.yml')
-        for filename in ['deploy.sh', 'smoke.py', 'release-env.py']:
+        for filename in ['deploy.sh', 'smoke.py', 'release-env.py', 'deploy-kubernetes.py', 'kubernetes-render.py']:
             archive.write(root / 'deployment' / filename, filename)
         archive.writestr('release.json', json.dumps(manifest, indent=2) + '\n')
     print(package)

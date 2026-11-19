@@ -51,12 +51,12 @@ jobs:
                   return json.load(response)
           # These IDs identify this lab's dedicated Sakila project and Default space.
           release = get('/api/Spaces-1/projects/Projects-21/releases/' + quote(os.environ['RELEASE'], safe=''))
-          if release['ProjectId'] != 'Projects-21' or 'Sakila isolated environments v1.' not in (release.get('ReleaseNotes') or ''):
-              raise SystemExit('Choose a new release created by the isolated-environment pipeline.')
+          if release['ProjectId'] != 'Projects-21' or 'Sakila Kubernetes environments v1.' not in (release.get('ReleaseNotes') or ''):
+              raise SystemExit('Choose a new release created by the Kubernetes pipeline.')
           process = get('/api/Spaces-1/deploymentprocesses/' + quote(release['ProjectDeploymentProcessSnapshotId'], safe=''))
           steps = process['Steps']
           gate = next((i for i, s in enumerate(steps) if s['Name'] == 'Approve Sakila Production'), None)
-          deploy = next((i for i, s in enumerate(steps) if s['Name'] == '02 - Deploy Sakila Docker Compose'), None)
+          deploy = next((i for i, s in enumerate(steps) if s['Name'] == '02 - Deploy Sakila Kubernetes'), None)
           if gate is None or deploy is None or gate >= deploy:
               raise SystemExit('Release snapshot lacks the Production approval before deployment.')
           print('Release contains the isolated-environment marker and Production approval gate.')

@@ -77,7 +77,7 @@ jobs:
           python -m pip install -r requirements-test.txt
           python -m playwright install --with-deps chromium
           bash -n deployment/deploy.sh
-          python -m pytest tests/test_release.py tests/test_deploy_script.py -q
+          python -m pytest tests/test_release.py tests/test_deploy_script.py tests/test_kubernetes.py -q
       - name: Build the three images once
         run: docker compose -f docker-compose.yml -f compose.build.yml build
       - name: Start full stack and wait for database and API readiness
@@ -180,7 +180,7 @@ jobs:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ needs.test-and-publish.outputs.version }}
           packages: sakila-deploy:${{ needs.test-and-publish.outputs.version }}
-          release_notes: Commit ${{ github.sha }}; tested images are pinned in release.json. Sakila isolated environments v1.
+          release_notes: Commit ${{ github.sha }}; tested images are pinned in release.json. Sakila Kubernetes environments v1.
       - name: Deploy through the polling Tentacle
         id: deploy
         uses: OctopusDeploy/deploy-release-action@v3
