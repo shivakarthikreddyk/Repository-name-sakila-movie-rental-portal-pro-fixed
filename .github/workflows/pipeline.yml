@@ -183,7 +183,7 @@ jobs:
           release_notes: Commit ${{ github.sha }}; tested images are pinned in release.json. Sakila Kubernetes environments v1.
       - name: Deploy through the polling Tentacle
         id: deploy
-        uses: OctopusDeploy/deploy-release-action@v3
+        uses: OctopusDeploy/deploy-release-action@v4
         with:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ steps.release.outputs.release_number }}
@@ -204,7 +204,7 @@ jobs:
           [[ "$TASK_STATE" == Success ]] || { echo "Octopus deployment ended with state: $TASK_STATE"; exit 1; }
       - name: Promote the same release to QA
         id: qa
-        uses: OctopusDeploy/deploy-release-action@v3
+        uses: OctopusDeploy/deploy-release-action@v4
         with:
           project: ${{ vars.OCTOPUS_PROJECT }}
           release_number: ${{ steps.release.outputs.release_number }}
