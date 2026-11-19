@@ -103,7 +103,7 @@ The workflow is [.github/workflows/pipeline.yml](.github/workflows/pipeline.yml)
    after Development succeeds. Both deployments run target health and API checks.
 7. Run **Promote Sakila release to Production** from GitHub Actions on `main`,
    entering that exact release number. Octopus requires Development and QA success
-   and pauses for an Octopus Administrator's approval before changing Production.
+   and pauses for a Sakila Production Approvers member's approval before changing Production.
    This workflow does not rebuild images. Approve while its job is running;
    after timeout, cancel the pending Octopus deployment and rerun the workflow
    to supply fresh private-GHCR credentials.
