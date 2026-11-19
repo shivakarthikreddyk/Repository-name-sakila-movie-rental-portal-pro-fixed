@@ -193,7 +193,7 @@ jobs:
             GHCR.Token:${{ secrets.GITHUB_TOKEN }}
       - name: Wait for the actual deployment result
         id: wait
-        uses: OctopusDeploy/await-task-action@v3
+        uses: OctopusDeploy/await-task-action@v4
         with:
           server_task_id: ${{ fromJson(steps.deploy.outputs.server_tasks)[0].serverTaskId }}
           timeout_after: 1200
@@ -214,7 +214,7 @@ jobs:
             GHCR.Token:${{ secrets.GITHUB_TOKEN }}
       - name: Wait for QA deployment and smoke checks
         id: qa_wait
-        uses: OctopusDeploy/await-task-action@v3
+        uses: OctopusDeploy/await-task-action@v4
         with:
           server_task_id: ${{ fromJson(steps.qa.outputs.server_tasks)[0].serverTaskId }}
           timeout_after: 1200
